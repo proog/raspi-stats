@@ -1,112 +1,142 @@
 #!/usr/bin/python
 
-import threading
-import httplib
 import json
 import os
 import subprocess
-import time
 import sys
+import argparse
+import requests
 from datetime import *
+from repeater import *
+from util import *
 
-class Repeater:
-    def __init__(self, interval, action):
-        self.interval = interval
-        self.action = action
-
-    def schedule(self):
-        next = datetime.now() + timedelta(seconds=self.interval)
-        log("Next execution in " + str(self.interval) + "s (" + format_time(next) + ")")
-
-        t = threading.Timer(self.interval, self.run)
-        t.daemon = True
-        t.start()
-        return t
-
-    def run(self):
-        log("Executing...")
-        self.action()
-        log("Execution finished")
-        self.schedule()
-
-def log(msg):
-    print "[" + format_time(datetime.now()) + "] " + str(msg)
-
-def format_time(datetime):
-    return datetime.strftime("%Y-%m-%d %H:%M:%S")
+cmd_args = None
+execution_count = 0
+collected_data = []
 
 def check_network():
     def ping():
         try:
-            output = subprocess.check_output(["ping", "-c 5", "google.dk"], stderr=subprocess.STDOUT)
+            output = subprocess.check_output(['ping', '-c 1', 'google.dk'], stderr=subprocess.STDOUT)
             success = True
             summary = output.splitlines()[-2:]
         except subprocess.CalledProcessError as e:
             success = False
             summary = e.output.splitlines()
-        except Exception:
+        except:
             success = False
             summary = None
 
         return {
-            "success": success,
-            "summary": summary
+            'success': success,
+            'summary': summary
         }
 
     def ip():
-        connection = httplib.HTTPSConnection("api.ipify.org")
-
         try:
-            connection.request("GET", "/?format=json")
-            response = connection.getresponse().read()
-            ip_address = json.JSONDecoder().decode(response)["ip"]
+            ip_address = requests.get('https://api.ipify.org/?format=json').json()['ip']
             success = True
-        except Exception:
+        except:
             ip_address = None
             success = False
 
         return {
-            "success": success,
-            "ip": ip_address
+            'success': success,
+            'ip': ip_address
         }
 
     return {
-        "ping": ping(),
-        "ip": ip()
+        'ping': ping(),
+        'ip': ip()
     }
 
-def upload(data):
-    print "stub"
+def check_system():
+    def load():
+        return dict(zip(['1min', '5min', '15min'], os.getloadavg()))
+    def uptime():
+        try:
+            with open('/proc/uptime', 'r') as f:
+                seconds = float(f.readline().split()[0])
+                success = True
+        except:
+            seconds = None
+            success = False
+
+        return {
+            'success': success,
+            'uptime': int(seconds) if seconds else None,
+            'uptime_pretty': str(timedelta(seconds = seconds)) if seconds else None
+        }
+
+    return {
+        'load_avg': load(),
+        'uptime' : uptime()
+    }
+
+def upload():
+    global cmd_args, collected_data
+    unsent = []
+
+    log('Attempting to upload %d data pack(s)...' % len(collected_data))
+
+    for item in collected_data:
+        try:
+            response = requests.post(cmd_args.url, json = item, timeout = 5)
+            if response.status_code != 201:
+                raise requests.exceptions.HTTPError('Wrong status code: %d' % response.status_code)
+        except Exception as e:
+            log(e.reason if 'reason' in e else e)
+            unsent.append(item)
+
+    log('%d of %d data packs successfully uploaded' % (len(collected_data) - len(unsent), len(collected_data)))
+    collected_data = unsent
 
 def execute():
+    global execution_count, cmd_args, collected_data
+
     time_start = datetime.utcnow()
-    load_avg = dict(zip([1, 5, 15], os.getloadavg()))
+    system = check_system()
     network = check_network()
     time_end = datetime.utcnow()
 
-    log(json.JSONEncoder(indent=2).encode({
-        "time_start": int(time_start.strftime("%s")),
-        "time_end": int(time_end.strftime("%s")),
-        "time_start_pretty": format_time(time_start),
-        "time_end_pretty": format_time(time_end),
-        "load_avg": load_avg,
-        "network": network
-    }))
+    data = {
+        'nick': cmd_args.nick,
+        'time_start': int(time_start.strftime('%s')),
+        'time_end': int(time_end.strftime('%s')),
+        'time_start_pretty': format_time(time_start),
+        'time_end_pretty': format_time(time_end),
+        'system': system,
+        'network': network
+    }
 
-def main(args):
-    if len(args) < 2:
-        print "Missing argument specifying interval in seconds"
-        sys.exit(1)
+    collected_data.append(data)
+    execution_count += 1
 
-    print "\nPress enter to exit at any time\n"
+    if(cmd_args.verbose):
+        log(json.dumps(data, indent = 2))
 
-    log("Scheduling...")
+    if len(collected_data) > 0 and execution_count % cmd_args.upload_every == 0:
+        upload()
 
-    repeater = Repeater(int(args[1]), execute)
-    repeater.schedule()
+def main():
+    global cmd_args
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-u', '--url', type = str, default = 'http://lololololol.bike.camera:3000/', help = 'Server to connect to')
+    parser.add_argument('-i', '--interval', type = int, default = 2, help = 'Interval between executions in seconds')
+    parser.add_argument('-j', '--upload', dest = 'upload_every', type = int, default = 1, help = 'Every n executions will trigger upload of collected data')
+    parser.add_argument('-v', '--verbose', action = 'store_true', help = 'Log collected data to console')
+    parser.add_argument('nick', type = str, help = 'Unique nickname to associate collected data with')
+    cmd_args = parser.parse_args()
+
+    print '\n-- Press enter to exit at any time --\n'
+
+    log('Scheduling...')
+
+    Repeater(cmd_args.interval, execute, 'Task').schedule()
     raw_input()
 
-    log("Exiting...")
+    log('Exiting...')
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
