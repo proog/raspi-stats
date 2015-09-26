@@ -1,0 +1,25 @@
+{
+  "name": "raspi-stats",
+  "version": "1.0.0",
+  "description": "A very funny project for the Pi, ha ha ha ha ha",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/proog/raspi-stats.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/proog/raspi-stats/issues"
+  },
+  "homepage": "https://github.com/proog/raspi-stats",
+  "dependencies": {
+    "body-parser": "^1.14.0",
+    "express": "^4.13.3",
+    "mongodb": "^2.0.43"
+  }
+}
