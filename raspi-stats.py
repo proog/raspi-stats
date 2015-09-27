@@ -7,6 +7,7 @@ import sys
 import argparse
 import requests
 import re
+import urlparse
 from datetime import *
 from repeater import *
 from util import *
@@ -33,15 +34,34 @@ def check_network():
             }
         except:
             return { 'success': False }
+    def speed():
+        global cmd_args
+        try:
+            url = urlparse.urljoin(cmd_args.url, '/speedtest')
+            tstart = datetime.utcnow()
+            response = requests.get(url)
+            tend = datetime.utcnow()
+            length = len(response.content)
+            seconds = (tend - tstart).total_seconds()
+
+            return {
+                'success': True,
+                'bytes': length,
+                'seconds': round(seconds, 2),
+                'mbps': round((length / 1024 / 1024 * 8) / seconds, 2)
+            }
+        except:
+            return { 'success': False }
 
     return {
         'ping': ping(),
-        'ip': ip()
+        'ip': ip(),
+        'speed': speed()
     }
 
 def check_system():
     def load():
-        return dict(zip(['1min', '5min', '15min'], os.getloadavg()))
+        return dict(zip(['1min', '5min', '15min'], map(lambda x: round(x, 2), os.getloadavg())))
     def uptime():
         proc_uptime = '/proc/uptime'
 
@@ -65,7 +85,7 @@ def check_system():
         with open(sys_temp, 'r') as f:
             return {
                 'success': True,
-                'temperature': float(f.readline()) / 1000
+                'temperature': round(float(f.readline()) / 1000, 2)
             }        
     def memory():
         proc_meminfo = '/proc/meminfo'
