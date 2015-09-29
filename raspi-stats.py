@@ -123,10 +123,10 @@ def check_system():
 
         return {
             'success': True,
-            'total': reduce(reduce_fn(regex_total), lines, None).group(1),
-            'free': reduce(reduce_fn(regex_free), lines, None).group(1),
-            'swap_total': reduce(reduce_fn(regex_swap_total), lines, None).group(1),
-            'swap_free': reduce(reduce_fn(regex_swap_free), lines, None).group(1)
+            'total': int(reduce(reduce_fn(regex_total), lines, None).group(1)),
+            'free': int(reduce(reduce_fn(regex_free), lines, None).group(1)),
+            'swap_total': int(reduce(reduce_fn(regex_swap_total), lines, None).group(1)),
+            'swap_free': int(reduce(reduce_fn(regex_swap_free), lines, None).group(1))
         }
 
     def disk_space():
