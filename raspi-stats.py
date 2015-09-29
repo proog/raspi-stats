@@ -8,12 +8,13 @@ import argparse
 import requests
 import re
 import urlparse
-from datetime import *
-from repeater import *
+from datetime import datetime, timedelta
+from repeater import Repeater
 from util import *
 
 cmd_args = None
 collected_data = []
+fail_data = { 'success': False }
 
 def check_network():
     def ping():
@@ -25,7 +26,7 @@ def check_network():
                 'summary': output.splitlines()[-2:]
             }
         except:
-            return { 'success': False }
+            return fail_data
     def ip():
         try:
             return {
@@ -33,7 +34,7 @@ def check_network():
                 'ip': requests.get('https://api.ipify.org/?format=json').json()['ip']
             }
         except:
-            return { 'success': False }
+            return fail_data
     def speed():
         global cmd_args
         try:
@@ -51,7 +52,7 @@ def check_network():
                 'mbps': round((length / 1024 / 1024 * 8) / seconds, 2)
             }
         except:
-            return { 'success': False }
+            return fail_data
 
     return {
         'ping': ping(),
@@ -66,7 +67,7 @@ def check_system():
         proc_uptime = '/proc/uptime'
 
         if not os.path.isfile(proc_uptime):
-            return { 'success': False }
+            return fail_data
 
         with open(proc_uptime, 'r') as f:
             seconds = int(float(f.readline().split()[0]))
@@ -80,7 +81,7 @@ def check_system():
         sys_temp = '/sys/class/thermal/thermal_zone0/temp'
 
         if not os.path.isfile(sys_temp):
-            return { 'success': False }
+            return fail_data
 
         with open(sys_temp, 'r') as f:
             return {
@@ -91,7 +92,7 @@ def check_system():
         proc_meminfo = '/proc/meminfo'
 
         if not os.path.isfile(proc_meminfo):
-            return { 'success': False }
+            return fail_data
 
         with open(proc_meminfo, 'r') as f:
             lines = f.readlines()
@@ -110,7 +111,7 @@ def check_system():
             root_line = reduce(lambda previous, line: previous or re.search('^.*\s+(\d+)\s+\d+\s+(\d+)\s+\d+%\s+\/\s*$', line), lines, None)
 
             if not root_line:
-                return { 'success': False }
+                return fail_data
 
             return {
                 'success': True,
@@ -118,7 +119,7 @@ def check_system():
                 'free': int(root_line.group(2))
             }
         except:
-            return { 'success': False }
+            return fail_data
 
     return {
         'load_avg': load(),
@@ -138,12 +139,13 @@ def upload():
             if response.status_code == 201:
                 return False # remove from list
         except Exception as e:
-            log(e.reason if 'reason' in e else e)
+            if cmd_args.verbose:
+                log(e.reason if 'reason' in e else e)
 
         return True
 
     total = len(collected_data)
-    log('Attempting to upload %d data pack(s)...' % total)
+    log('Attempting to upload %d data pack(s)...' % total, cmd_args.verbose)
 
     collected_data = filter(upload_filter, collected_data)
 
@@ -167,8 +169,7 @@ def execute():
         'network': network
     }
     
-    if(cmd_args.verbose):
-        log(json.dumps(data, indent = 2))
+    log(json.dumps(data, indent = 2), cmd_args.json)
 
     collected_data.append(data)
     upload()
@@ -179,18 +180,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--url', type = str, default = 'http://localhost:3000/', help = 'Server to connect to')
     parser.add_argument('-i', '--interval', type = int, default = 2, help = 'Interval between executions in seconds')
-    parser.add_argument('-v', '--verbose', action = 'store_true', help = 'Log collected data to console')
+    parser.add_argument('-v', '--verbose', action = 'store_true', help = 'More log messages')
+    parser.add_argument('-j', '--json', action = 'store_true', help = 'Log collected data to console')
     parser.add_argument('nick', type = str, help = 'Unique nickname to associate collected data with')
     cmd_args = parser.parse_args()
 
     print '\n-- Press enter to exit at any time --\n'
 
-    log('Scheduling...')
+    log('Scheduling...', cmd_args.verbose)
 
-    Repeater(cmd_args.interval, execute, 'Task').schedule()
+    Repeater(cmd_args.interval, execute, 'Task', cmd_args.verbose).run()
     raw_input()
 
-    log('Exiting...')
+    log('Exiting...', cmd_args.verbose)
 
 if __name__ == '__main__':
     main()
