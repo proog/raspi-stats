@@ -21,8 +21,8 @@ def check_network():
         try:
             lines = subprocess.check_output(['ping', '-c 10', 'google.dk'], stderr=subprocess.STDOUT).splitlines()
 
-            packet_loss = float(re.search('^.*(\d+.\d+)% packet loss.*$', lines[-2]).group(1))
-            roundtrip_regex = re.search('^.*(\d+.\d+)/(\d+.\d+)/(\d+.\d+)/(\d+.\d+) ms*$', lines[-1])
+            packet_loss = float(re.search('^.* (\d+(?:\.\d+)?)% packet loss.*$', lines[-2]).group(1))
+            roundtrip_regex = re.search('^.* (\d+.\d+)/(\d+.\d+)/(\d+.\d+)/(\d+.\d+) ms.*$', lines[-1])
             roundtrip_min = float(roundtrip_regex.group(1))
             roundtrip_avg = float(roundtrip_regex.group(2))
             roundtrip_max = float(roundtrip_regex.group(3))
