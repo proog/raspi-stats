@@ -16,7 +16,6 @@ class Repeater:
         t = threading.Timer(self.interval, self.run)
         t.daemon = True
         t.start()
-        return t
 
     def run(self):
         log('%s executing...' % self.name, self.verbose)

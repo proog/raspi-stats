@@ -1,17 +1,16 @@
 #!/usr/bin/python
 
-import json
 import os
 import subprocess
 import argparse
 import requests
 import re
 import urlparse
+from collector import Collector
 from repeater import Repeater
 from util import *
 
 cmd_args = None
-collected_data = []
 fail_data = {'success': False}
 
 
@@ -19,7 +18,7 @@ def check_network():
     global cmd_args
     def ping():
         try:
-            lines = subprocess.check_output(['ping', '-c 10', 'google.dk'], stderr=subprocess.STDOUT).splitlines()
+            lines = subprocess.check_output(['ping', '-c 10', 'google.com'], stderr=subprocess.STDOUT).splitlines()
 
             packet_loss = float(re.search('^.* (\d+(?:\.\d+)?)% packet loss.*$', lines[-2]).group(1))
             roundtrip_regex = re.search('^.* (\d+.\d+)/(\d+.\d+)/(\d+.\d+)/(\d+.\d+) ms.*$', lines[-1])
@@ -158,71 +157,28 @@ def check_system():
     }
 
 
-def upload():
-    global cmd_args, collected_data
-
-    def upload_filter(item):
-        try:
-            response = requests.post(cmd_args.url, json=item, timeout=5)
-
-            if response.status_code == 201:
-                return False  # remove from list
-        except Exception as e:
-            if cmd_args.verbose:
-                log(e)
-
-        return True
-
-    total = len(collected_data)
-    log('Attempting to upload %d data pack(s)...' % total, cmd_args.verbose)
-
-    collected_data = filter(upload_filter, collected_data)
-
-    log('%d of %d data packs successfully uploaded' % (total - len(collected_data), total))
-
-
-def execute():
-    global cmd_args, collected_data
-
-    time_start = datetime.utcnow()
-    system = check_system()
-    network = check_network()
-    time_end = datetime.utcnow()
-
-    data = {
-        'nick': cmd_args.nick,
-        'time_start': int(time_start.strftime('%s')),
-        'time_end': int(time_end.strftime('%s')),
-        'time_start_pretty': format_time(time_start),
-        'time_end_pretty': format_time(time_end),
-        'system': system,
-        'network': network
-    }
-
-    log(json.dumps(data, indent=2), cmd_args.json)
-
-    if not cmd_args.dry_run:
-        collected_data.append(data)
-        upload()
-
-
 def main():
     global cmd_args
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-u', '--url', type=str, default='http://localhost:3000/', help='Server to connect to')
-    parser.add_argument('-i', '--interval', type=int, default=2, help='Interval between executions in seconds')
-    parser.add_argument('-v', '--verbose', action='store_true', help='More log messages')
-    parser.add_argument('-j', '--json', action='store_true', help='Log collected data to console')
-    parser.add_argument('--dry-run', action='store_true', help='Do not store or upload collected data')
+    parser.add_argument('-u', '--url', type=str, default='http://localhost:3000/', help='Server to upload data to and use for speed tests')
+    parser.add_argument('-i', '--interval', type=int, default=600, help='Interval (in seconds) between system checks')
+    parser.add_argument('-n', '--network-interval', type=int, default=3600, help='Interval (in seconds) between network checks')
+    parser.add_argument('--verbose', action='store_true', help='More log messages, including collected data')
+    parser.add_argument('--dry-run', action='store_true', help='Do not upload collected data')
     parser.add_argument('nick', type=str, help='Unique nickname to associate collected data with')
     cmd_args = parser.parse_args()
 
-    print '\n-- Press enter to exit at any time --\n'
+    print '\n-- Press enter or ctrl-c to exit --\n'
 
     log('Scheduling...', cmd_args.verbose)
 
-    Repeater(cmd_args.interval, execute, 'Task', cmd_args.verbose).run()
+    system_collector = Collector(check_system, cmd_args.url, cmd_args.nick, 'System collector', cmd_args.verbose, cmd_args.dry_run)
+    network_collector = Collector(check_network, cmd_args.url, cmd_args.nick, 'Network collector', cmd_args.verbose, cmd_args.dry_run)
+
+    Repeater(cmd_args.interval, system_collector.collect, 'System repeater', cmd_args.verbose).run()
+    Repeater(cmd_args.network_interval, network_collector.collect, 'Network repeater', cmd_args.verbose).run()
+
     raw_input()
 
     log('Exiting...', cmd_args.verbose)

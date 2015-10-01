@@ -8,3 +8,6 @@ def log(msg, condition=True):
 
 def format_time(date_time):
     return date_time.strftime('%Y-%m-%d %H:%M:%S')
+
+def epoch_time(date_time):
+    return int((date_time - datetime.utcfromtimestamp(0)).total_seconds())
