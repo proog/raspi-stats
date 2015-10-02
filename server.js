@@ -9,7 +9,11 @@ MongoClient.connect('mongodb://localhost:27017/raspi-stats', function (err, db) 
   }
   
   app.use(bodyParser.json());
-  app.post('/', function (req, res) {
+  app.get('/stats', function (req, res) {
+    db.collection('stats').find({}).toArray(function (err, result) {
+      res.send(result);
+    });
+  }).post('/stats', function (req, res) {
     var data = req.body;
 
     if (!data || !data.nick || data.nick.length === 0) {
@@ -17,7 +21,7 @@ MongoClient.connect('mongodb://localhost:27017/raspi-stats', function (err, db) 
       res.status(400).end();
     }
     else {
-      db.collection('stats').insert(data, function (err, result) {
+      db.collection('stats').insertOne(data, function (err, result) {
         if (err) {
           console.log(err);
         }
@@ -25,8 +29,7 @@ MongoClient.connect('mongodb://localhost:27017/raspi-stats', function (err, db) 
         res.status(err ? 500 : 201).end();
       });
     }
-  });
-  app.get('/speedtest', function (req, res) {
+  }).get('/speedtest', function (req, res) {
     res.sendFile(__dirname + '/10mb.bin');
   });
 

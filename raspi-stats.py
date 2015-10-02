@@ -173,8 +173,9 @@ def main():
 
     log('Scheduling...', cmd_args.verbose)
 
-    system_collector = Collector(check_system, cmd_args.url, cmd_args.nick, 'System collector', cmd_args.verbose, cmd_args.dry_run)
-    network_collector = Collector(check_network, cmd_args.url, cmd_args.nick, 'Network collector', cmd_args.verbose, cmd_args.dry_run)
+    upload_url = urlparse.urljoin(cmd_args.url, '/stats')
+    system_collector = Collector(check_system, upload_url, cmd_args.nick, 'System collector', cmd_args.verbose, cmd_args.dry_run)
+    network_collector = Collector(check_network, upload_url, cmd_args.nick, 'Network collector', cmd_args.verbose, cmd_args.dry_run)
 
     Repeater(cmd_args.interval, system_collector.collect, 'System repeater', cmd_args.verbose).run()
     Repeater(cmd_args.network_interval, network_collector.collect, 'Network repeater', cmd_args.verbose).run()
